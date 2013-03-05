@@ -1,0 +1,71 @@
+
+!obj:pylearn2.train.Train {
+    #Here we create out train dataset.I consider the first 3900 examples as the training set and preprocess the data by 
+    # creating a Standardize object which subtracts the mean and divides the data by standard deviation. 
+    dataset : &train !obj:contest_dataset.ContestDataset {
+        which_set: 'train',
+        start: 0,
+        stop: 3900,
+        preprocessor : !obj:pylearn2.datasets.preprocessing.GlobalContrastNormalization {
+            use_norm: False,
+            subtract_mean: True
+        },
+        fit_preprocessor: True,
+        fit_test_preprocessor: True,
+    },
+
+
+    #Next we make the model to be trained. It is a MLP with one hidden layer and one softmax output layer.
+    model: !obj:pylearn2.models.mlp.MLP {
+        layers: [ !obj:pylearn2.models.mlp.RectifiedLinear {
+            dim: 600,
+            layer_name: 'hiddenLayer',
+            sparse_init: 15,
+        }, !obj:pylearn2.models.mlp.Softmax {
+            n_classes: 7,
+            layer_name: 'outputLayer',
+            irange: 0.
+        } ],
+        nvis: 2304,
+    },
+
+    # Next we need to specify the training algorithm that will be used to train
+    # the model.  Here we use stochastic gradient descent.
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: 100,
+        learning_rate: 0.1,
+        monitoring_dataset:
+            {
+                'train' : *train,
+                'test' : !obj:contest_dataset.ContestDataset {
+                    which_set: 'train',
+                    start: 3900,
+                    stop: 4100,
+                    preprocessor : !obj:pylearn2.datasets.preprocessing.GlobalContrastNormalization {
+                        use_norm: False,
+                        subtract_mean: True
+                    },
+                    fit_preprocessor: True,
+                }
+            },
+        cost:   !obj:pylearn2.costs.cost.MethodCost {
+                method: 'cost_from_X',
+                supervised: 1
+            },        
+       termination_criterion: !obj:pylearn2.termination_criteria.MonitorBased {
+            channel_name: "test_outputLayer_misclass",
+            prop_decrease: 0.,
+            N: 15
+        }
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+             channel_name: 'test_outputLayer_misclass',
+             save_path: "GCN_4.pkl"
+        },  
+        !obj:pylearn2.training_algorithms.sgd.OneOverEpoch {
+             start: 25,
+             half_life: 28
+        }
+    ],
+}
