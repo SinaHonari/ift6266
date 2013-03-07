@@ -1,0 +1,95 @@
+
+!obj:pylearn2.train.Train {
+    # The !pkl tag is used to create an object from a pkl file. Here we retrieve
+    #the dataset made by make_dataset.py and use it as our training dataset.
+    dataset : &train !obj:contest_dataset.ContestDataset {
+        which_set: 'train',
+        start: 0,
+        stop: 3500,
+        preprocessor : !obj:pylearn2.datasets.preprocessing.Standardize {},
+        fit_preprocessor: True,
+        fit_test_preprocessor: True,
+    },
+
+
+    #Next we make the model to be trained. It is a MLP with one hidden layer.
+    model: !obj:pylearn2.models.mlp.MLP {
+                 batch_size: 100,
+                 seed: 12345,
+                 input_space: !obj:pylearn2.space.Conv2DSpace {
+                 shape: [48, 48],
+                 num_channels: 1,
+        },
+        layers: [ !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+                     layer_name: 'h1',
+                     output_channels: 64,
+                     init_bias : 1,
+                     irange: .01,
+                     kernel_shape: [11, 11],
+                     pool_shape: [3, 3],
+                     pool_stride: [2, 2],
+                     max_kernel_norm: 1.8,
+                     border_mode: 'valid',
+                     detector_normalization: !obj:pylearn2.expr.normalize.CrossChannelNormalization {},
+                 }, !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+                     layer_name: 'h2',
+                     output_channels: 128,
+                     init_bias : 1,
+                     irange: .01,
+                     kernel_shape: [5, 5],
+                     pool_shape: [3, 3],
+                     pool_stride: [2, 2],
+                     max_kernel_norm: 1.8,
+                     border_mode: 'valid',
+                     detector_normalization: !obj:pylearn2.expr.normalize.CrossChannelNormalization {},
+                 }, !obj:pylearn2.models.mlp.RectifiedLinear {
+                     dim: 600,
+                     init_bias: 1,
+                     layer_name: 'h3',
+                     sparse_init: 15,
+                 }, !obj:pylearn2.models.mlp.Softmax {
+                     n_classes: 7,
+                     layer_name: 'outputLayer',
+                     irange: 0.01,
+                 } 
+               ],
+         },
+
+    # Next we need to specify the training algorithm that will be used to train
+    # the model.  Here we use stochastic gradient descent.
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: 100,
+        learning_rate: 0.01,
+        monitoring_dataset:
+            {
+                'train' : *train,
+                'test' : !obj:contest_dataset.ContestDataset {
+                    which_set: 'train',
+                    start: 3500,
+                    stop: 4100,
+                    preprocessor : !obj:pylearn2.datasets.preprocessing.Standardize {},
+                    fit_preprocessor: True,
+                    fit_test_preprocessor: True,
+                }
+            },
+        cost: !obj:pylearn2.costs.cost.SumOfCosts { costs: [
+            !obj:pylearn2.costs.cost.MethodCost {
+                method: 'cost_from_X',
+                supervised: 1
+            }, !obj:pylearn2.models.mlp.WeightDecay {
+                coeffs: [ .0005, .0005, .0005 , .0005]
+            }
+            ]
+       },        
+       termination_criterion: !obj:pylearn2.termination_criteria.MonitorBased {
+            channel_name: "test_outputLayer_misclass",
+            prop_decrease: 0.,
+            N: 15
+        }
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+             channel_name: 'test_outputLayer_misclass',
+             save_path: "1.pkl"
+        }, ],
+}
