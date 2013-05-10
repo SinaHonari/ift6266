@@ -1,0 +1,81 @@
+!obj:pylearn2.train.Train {
+    dataset: &train !obj:keypoints_dataset.FacialKeypointDataset {
+        which_set: 'train',
+        preprocessor : !obj:pylearn2.datasets.preprocessing.Pipeline {
+                           items: [ 
+                               !obj:pylearn2.datasets.preprocessing.ShuffleAndSplit 
+                                {
+                                    seed: 34533232,
+                                    start: 0,
+                                    stop: 6500
+                                },
+                               !obj:pylearn2.datasets.preprocessing.ZCA 
+                                {
+                                    filter_bias: 8.0
+                                }
+                            ]
+                        }, 
+        fit_preprocessor: True,
+        fit_test_preprocessor: True,
+    },
+
+    model: !obj:pylearn2.models.mlp.MLP {
+        layers: [
+             !obj:pylearn2.models.mlp.PretrainedLayer {
+                    layer_name: 'h1',
+                    layer_content: !pkl: "DAE_1.pkl",
+             },
+             !obj:pylearn2.models.mlp.PretrainedLayer {
+                    layer_name: 'h2',
+                    layer_content: !pkl: "DAE_2.pkl",
+             },
+             !obj:pylearn2.models.mlp.Linear {
+                 layer_name: 'y',
+                 dim: 30,
+                 sparse_init: 5
+             },
+         ],
+        nvis: 9216
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: 64,
+        learning_rate: 0.001,
+        monitoring_dataset:
+            {
+                'train' : *train ,
+                'valid' : !obj:keypoints_dataset.FacialKeypointDataset {
+                              which_set: 'train',
+                              preprocessor: !obj:pylearn2.datasets.preprocessing.Pipeline {
+                                  items: [ 
+                                       !obj:pylearn2.datasets.preprocessing.ShuffleAndSplit 
+                                        {
+                                            seed: 34533232,
+                                            start: 6500,
+                                            stop: 7049
+                                        },
+                                       !obj:pylearn2.datasets.preprocessing.ZCA 
+                                        {
+                                            filter_bias: 8.0
+                                        }
+
+                                  ]
+                              }, 
+                              fit_preprocessor: True,
+                              fit_test_preprocessor: True,
+                          }
+            },
+        cost: !obj:pylearn2.costs.mlp.missing_target_cost.MissingTargetCost {
+        },
+        termination_criterion: !obj:pylearn2.termination_criteria.MonitorBased {
+            channel_name: "valid_objective",
+            prop_decrease: 0.,
+            N: 30
+        }
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+             channel_name: 'valid_objective',
+             save_path: "dae_2_supervised.pkl"
+        },
+    ]
+}
